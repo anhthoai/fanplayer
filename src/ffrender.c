@@ -43,11 +43,17 @@ typedef struct
     int                pixel_fmt;
     void              *surface;
 
-    // video render rect
-    int                rect_x;
-    int                rect_y;
-    int                rect_w;
-    int                rect_h;
+    // video render src rect
+    int                src_rect_x;
+    int                src_rect_y;
+    int                src_rect_w;
+    int                src_rect_h;
+
+    // video render dst rect
+    int                dst_rect_x;
+    int                dst_rect_y;
+    int                dst_rect_w;
+    int                dst_rect_h;
 
     // playback speed
     int                speed_value;
@@ -133,8 +139,10 @@ void* render_open(int adevtype, int srate, int sndfmt, int64_t ch_layout,
     render->vdev_type    = vdevtype;
     render->video_width  = w;
     render->video_height = h;
-    render->rect_w       = w;
-    render->rect_h       = h;
+    render->src_rect_w   = w;
+    render->src_rect_h   = h;
+    render->dst_rect_w   = w;
+    render->dst_rect_h   = h;
     render->frame_rate   = frate;
     render->pixel_fmt    = pixfmt;
 #ifdef WIN32
@@ -375,11 +383,10 @@ void render_video(void *hrender, AVFrame *video)
         if (render->status & RENDER_UDPATE_RECT) {
             render->status &= ~RENDER_UDPATE_RECT;
             // vdev set rect
-            vdev_setrect(render->vdev, render->rect_x, render->rect_y, render->rect_w, render->rect_h);
+            vdev_setrect(render->vdev, render->dst_rect_x, render->dst_rect_y, render->dst_rect_w, render->dst_rect_h);
             // we need recreate sws
             if (render->sws_context) sws_freeContext(render->sws_context);
-            render->sws_context = sws_getContext(render->video_width, render->video_height, render->pixel_fmt,
-                vdev->sw, vdev->sh, vdev->pixfmt, SWS_FAST_BILINEAR, 0, 0, 0);
+            render->sws_context = sws_getContext(render->src_rect_w, render->src_rect_h, render->pixel_fmt, vdev->sw, vdev->sh, vdev->pixfmt, SWS_FAST_BILINEAR, 0, 0, 0);
         }
 
         if (video->format == AV_PIX_FMT_DXVA2_VLD) {
@@ -390,7 +397,14 @@ void render_video(void *hrender, AVFrame *video)
             picture.linesize[0] = 0;
             vdev_lock(render->vdev, picture.data, picture.linesize);
             if (picture.data[0] && video->pts != -1) {
-                if (render->sws_context && 0 == sws_scale(render->sws_context, (const uint8_t**)video->data, video->linesize, 0, render->video_height, picture.data, picture.linesize)) {
+                uint8_t* data[AV_NUM_DATA_POINTERS] = { NULL };
+                int      i;
+                if (render->pixel_fmt == AV_PIX_FMT_YUV420P || render->pixel_fmt == AV_PIX_FMT_YUVJ420P) {
+                    for (i=0; i<AV_NUM_DATA_POINTERS; i++) if (video->data[i]) data[i] = video->data[i] + render->src_rect_y / (i == 0 ? 1 : 2) * video->linesize[i] + render->src_rect_x / (i == 0 ? 1 : 2);
+                } else {
+                    memcpy(data, video->data, sizeof(data));
+                }
+                if (render->sws_context && 0 == sws_scale(render->sws_context, (const uint8_t**)data, video->linesize, 0, render->src_rect_h, picture.data, picture.linesize)) {
                     //++ on some android device, output of h264 mediacodec decoder is NV12
                     if (  (render->pixel_fmt == AV_PIX_FMT_YUV420P || render->pixel_fmt == AV_PIX_FMT_YUVJ420P)
                         && video->data[0] && video->data[1] && !video->data[2]
@@ -423,11 +437,11 @@ void render_setrect(void *hrender, int type, int x, int y, int w, int h)
     if (!hrender) return;
     switch (type) {
     case 0:
-        render->rect_x = x;
-        render->rect_y = y;
-        render->rect_w = MAX(w, 1);
-        render->rect_h = MAX(h, 1);
-        render->status|= RENDER_UDPATE_RECT;
+        render->dst_rect_x = x;
+        render->dst_rect_y = y;
+        render->dst_rect_w = MAX(w, 1);
+        render->dst_rect_h = MAX(h, 1);
+        render->status |= RENDER_UDPATE_RECT;
         break;
 #if CONFIG_ENABLE_VEFFECT
     case 1:
@@ -437,6 +451,17 @@ void render_setrect(void *hrender, int type, int x, int y, int w, int h)
         render->veffect_h = MAX(h, 1);
         break;
 #endif
+    case 2:
+        render->src_rect_w = MAX(w, 1);
+        render->src_rect_h = MAX(h, 1);
+        render->src_rect_w = MIN(render->src_rect_w, render->video_width );
+        render->src_rect_h = MIN(render->src_rect_h, render->video_height);
+        render->src_rect_x = MAX(x, 0);
+        render->src_rect_y = MAX(y, 0);
+        render->src_rect_x = MIN(render->src_rect_x, render->video_width - render->src_rect_w);
+        render->src_rect_y = MIN(render->src_rect_y, render->video_height- render->src_rect_h);
+        render->status |= RENDER_UDPATE_RECT;
+        break;
     }
 }
 
@@ -595,6 +620,12 @@ void render_getparam(void *hrender, int id, void *param)
     case PARAM_DEFINITION_VALUE:
         *(float*)param  = render->definitionval;
         render->status |= RENDER_DEFINITION_EVAL;
+        break;
+    case PARAM_RENDER_GET_ZOOM_RECT:
+        ((int32_t*)param)[0] = render->src_rect_x;
+        ((int32_t*)param)[1] = render->src_rect_y;
+        ((int32_t*)param)[2] = render->src_rect_w;
+        ((int32_t*)param)[3] = render->src_rect_h;
         break;
     }
 }

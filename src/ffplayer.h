@@ -104,6 +104,7 @@ enum {
     PARAM_RENDER_REINIT_A,
     PARAM_RENDER_REINIT_V,
     PARAM_RENDER_VDEV_WIN,
+    PARAM_RENDER_GET_ZOOM_RECT,
     //-- for render
 };
 
@@ -177,7 +178,7 @@ void  player_close   (void *hplayer);
 void  player_play    (void *hplayer);
 void  player_pause   (void *hplayer);
 void  player_seek    (void *hplayer, int64_t ms, int type);
-void  player_setrect (void *hplayer, int type, int x, int y, int w, int h); // type: 0 - video rect, 1 - visual effect rect
+void  player_setrect (void *hplayer, int type, int x, int y, int w, int h); // type: 0 - dst video rect, 1 - visual effect rect, 2 - src video rect (zoom)
 int   player_snapshot(void *hplayer, char *file, int w, int h, int waitt);
 int   player_record  (void *hplayer, char *file);
 void  player_setparam(void *hplayer, int id, void *param);
@@ -220,9 +221,9 @@ player_seek     跳转到指定位置
     往回搜索的时间范围，通常情况下传入 -1 即可。但是对于一些特殊视频，传入 -1
     可能没法正确执行会退操作，可以尝试修改为 -500 或则更大
 
-player_setrect  设置显示区域，有两种显示区域，视频显示区和视觉效果显示区
+player_setrect  设置显示区域，有三种显示区域，视频显示区、视觉效果显示区和缩放显示区域
     hplayer     - 指向 player_open 返回的 player 对象
-    type        - 指定区域类型  0 - video rect, 1 - visual effect rect
+    type        - 指定区域类型  0 - dst video rect, 1 - visual effect rect, 2 - src video (zoom)
     x,y,w,h     - 指定显示区域
 
 player_snapshot 视频播放截图

@@ -14,6 +14,7 @@
 #define TIMER_ID_PROGRESS           2
 #define TIMER_ID_HIDE_TEXT          3
 #define TIMER_ID_DISP_DEFINITIONVAL 4
+#define TIMER_ID_DISP_ZOOMINFO      5
 
 static void get_app_dir(char *path, int size)
 {
@@ -88,6 +89,7 @@ CplayerDlg::CplayerDlg(CWnd* pParent /*=NULL*/)
     m_bResetPlayer= FALSE;
     m_bIsRecording= FALSE;
     m_DefinitionEvalEnable = FALSE;
+    m_nVideoZoom  = 100;
 }
 
 void CplayerDlg::DoDataExchange(CDataExchange* pDX)
@@ -181,6 +183,7 @@ BEGIN_MESSAGE_MAP(CplayerDlg, CDialog)
     ON_COMMAND(ID_VDEVD3D_ROTATE , &CplayerDlg::OnVdevD3dRotate )
     ON_COMMAND(ID_RECORD_VIDEO   , &CplayerDlg::OnRecordVideo   )
     ON_COMMAND(ID_DEFINITION_EVAL, &CplayerDlg::OnDefinitionEval)
+    ON_COMMAND(ID_VIDEO_ZOOM     , &CplayerDlg::OnVideoZoom     )
 END_MESSAGE_MAP()
 
 
@@ -320,7 +323,13 @@ void CplayerDlg::OnTimer(UINT_PTR nIDEvent)
             player_textout(m_ffPlayer, 20, 20, RGB(0, 255, 0), m_strTxt);
         }
         break;
-
+    case TIMER_ID_DISP_ZOOMINFO: {
+            int32_t rect[4];
+            player_getparam(m_ffPlayer, PARAM_RENDER_GET_ZOOM_RECT, rect);
+            _stprintf(m_strTxt, TEXT("zoom: (%d %d %d %d)"), rect[0], rect[1], rect[0] + rect[2], rect[1] + rect[3]);
+            player_textout(m_ffPlayer, 20, 20, RGB(0, 255, 0), m_strTxt);
+        }
+        break;
     default:
         CDialog::OnTimer(nIDEvent);
         break;
@@ -371,7 +380,18 @@ BOOL CplayerDlg::PreTranslateMessage(MSG *pMsg)
 {
     if (TranslateAccelerator(GetSafeHwnd(), m_hAcc, pMsg)) return TRUE;
 
-    if (pMsg->message == MSG_FANPLAYER) {
+    if (pMsg->message == WM_KEYDOWN && (pMsg->wParam == VK_UP || pMsg->wParam == VK_DOWN || pMsg->wParam == VK_LEFT || pMsg->wParam == VK_RIGHT) && m_nVideoZoom != 100) {
+        int32_t rect[4];
+        player_getparam(m_ffPlayer, PARAM_RENDER_GET_ZOOM_RECT, rect);
+        switch (pMsg->wParam) {
+        case VK_UP   : rect[1] -= 2; break;
+        case VK_DOWN : rect[1] += 2; break;
+        case VK_LEFT : rect[0] -= 2; break;
+        case VK_RIGHT: rect[0] += 2; break;
+        }
+        player_setrect(m_ffPlayer, 2, rect[0], rect[1], rect[2], rect[3]);
+        return TRUE;
+    } else if (pMsg->message == MSG_FANPLAYER) {
         switch (pMsg->wParam)
         {
         case MSG_OPEN_DONE:
@@ -556,4 +576,19 @@ void CplayerDlg::OnDefinitionEval()
         KillTimer(TIMER_ID_DISP_DEFINITIONVAL);
         player_textout(m_ffPlayer, 0, 0, 0, NULL);
     }
+}
+
+void CplayerDlg::OnVideoZoom()
+{
+    PLAYER_INIT_PARAMS params;
+    player_getparam(m_ffPlayer, PARAM_PLAYER_INIT_PARAMS, &params);
+    m_nVideoZoom -= 10;
+    if (m_nVideoZoom < 10) m_nVideoZoom = 100;
+    if (m_nVideoZoom != 100) {
+        SetTimer(TIMER_ID_DISP_ZOOMINFO, 200, NULL);
+    } else {
+        KillTimer(TIMER_ID_DISP_ZOOMINFO);
+        player_textout(m_ffPlayer, 0, 0, 0, NULL);
+    }
+    player_setrect(m_ffPlayer, 2, 0, 0, m_nVideoZoom * params.video_owidth / 100, m_nVideoZoom * params.video_oheight / 100);
 }

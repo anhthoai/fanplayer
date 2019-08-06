@@ -93,7 +93,7 @@ void  vdev_getparam(void *ctxt, int id, void *param);
 
 #ifdef WIN32
 #define DEF_FONT_SIZE   32
-#define DEF_FONT_NAME   TEXT("Arial")
+#define DEF_FONT_NAME   TEXT("ËÎÌו")
 void  vdev_textout (void *ctxt, int x, int y, int color, TCHAR *text);
 void  vdev_textcfg (void *ctxt, TCHAR *fontname, int fontsize);
 #endif

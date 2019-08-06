@@ -895,7 +895,7 @@ void player_setrect(void *hplayer, int type, int x, int y, int w, int h)
     if (!hplayer) return;
 
     //++ if set visual effect rect
-    if (type == 1) {
+    if (type != 0) {
         render_setrect(player->render, type, x, y, w, h);
         return;
     }
